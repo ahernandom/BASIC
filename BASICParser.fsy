@@ -1,0 +1,246 @@
+%{
+open BASICAST
+
+let mutable physicalNumber = ref 1
+%}
+
+// The start token becomes a parser function in the compiled code.
+%start start
+
+// Tokens with no additional information for the AST. 
+%token LPAREN RPAREN EOF COMMA ENDLINE
+
+// Tokens that include an int to store their line number and in some cases an
+// additional value.
+%token <int> PLUS MINUS TIMES DIV POW EQU LSS LQU GRT GQU NQU LET READ DATA PRINT GOTO IF THEN FOR NEXT END STOP DEF GOSUB RETURN DIM REM SIN COS TAN ATN EXP ABS LOG SQR INT RND TO STEP
+%token <int * string> IDENT FN NUMBER
+%token <string> LABEL
+
+// This is the type of the data produced by a successful reduction
+// of the 'start' symbol:
+%type <Prog> start
+%%
+
+start: 
+    program endline EOF { $1 }
+	
+endline:
+   {}
+   | ENDLINE {}
+
+program: 
+    statement_list { Program ($1) } 
+
+statement_list:
+      { [] } 
+    | statement statement_list { $1::$2 }
+    
+statement:
+      letB       { $1 }
+    | read      { $1 }
+    | data      { $1 }
+    | print     { $1 }
+    | goto      { $1 }
+    | ifB        { $1 }
+    | forB       { $1 }
+    | next      { $1 }
+    | endB       { $1 }
+    | stop      { $1 }
+    | def       { $1 }
+    | gosub     { $1 }
+    | returnB    { $1 }
+    | dim       { $1 }
+    | rem       { $1 }
+    
+    
+letB:
+    NUMBER LET ident EQU expression ENDLINE{ let physical, number = $1
+                                      Let (physical, number, $3, $5) }
+ 
+read:
+    NUMBER READ ident_list ENDLINE { let physical, number = $1
+                              Read (physical, number, $3) }
+
+ident_list:
+    ident               { [$1] }
+    | ident COMMA ident_list { $1::$3 }
+
+
+data:
+    NUMBER DATA number_list ENDLINE{
+                         let physical, n = $1
+                         Data (physical, n, $3)
+                       }
+
+number_list:
+    NUMBER               {
+                            let line, n = $1
+                            [n]
+                         }
+    | NUMBER COMMA number_list {
+                           let line, n = $1
+                           n::$3} 
+
+print:
+    NUMBER PRINT nodoP ENDLINE{ let physical, number = $1
+                                Print(physical, number, $3)}
+                                
+nodoP:
+    empty                {$1}
+    | LABEL              {[PStr($1)]}
+    | expression       {[PExpr($1)]}
+    | COMMA            {[PComma]}
+    | LABEL nodoP      {PStr($1)::$2}
+    | expression nodoP {PExpr($1)::$2}
+    | COMMA nodoP     {PComma::$2}
+
+empty:
+    {[PEmpty]}
+goto:
+    NUMBER GOTO NUMBER ENDLINE{
+                         let physical, number = $1
+                         let line, n = $3
+                         Goto (physical, number, n)
+                        }
+
+ifB:
+    NUMBER IF expression relational expression THEN NUMBER ENDLINE {
+                                                             let physical, number = $1
+                                                             let line, n = $7
+                                                             If (physical, number, $3, $4, $5, n)
+                                                           }
+relational:
+    EQU {"="}
+    | LSS {"<"}
+    | GRT {">"}
+    | LQU {"<="}
+    | GQU {">="}
+    | NQU {"<>"}
+    
+forB:
+    NUMBER FOR unsubs EQU expression TO expression ENDLINE {
+                                             let physical, number = $1
+                                             For (physical, number, $3, $5, $7, None)
+                                                   }
+  | NUMBER FOR unsubs EQU expression TO expression STEP expression ENDLINE{
+                                                        let physical, number = $1
+                                                For (physical, number, $3, $5,$7, Some($9))
+                                                                  }
+
+unsubs:
+     IDENT { Variable($1) }
+
+next:
+    NUMBER NEXT unsubs ENDLINE{
+                        let physical, number = $1
+                        Next (physical, number, $3)
+                      }
+
+endB:
+    NUMBER END ENDLINE { let physical, number = $1
+                 End (physical, number) }
+
+stop:
+    NUMBER STOP ENDLINE{
+                  let physical, number = $1
+                  Stop (physical, number)
+                }
+    
+def:
+    NUMBER DEF FN LPAREN unsubs RPAREN EQU expression ENDLINE{
+                                                let physical, number = $1
+                                                let line, letter = $3
+                                                Def (physical, number, letter, $5, $8)
+                                              }
+gosub:
+    NUMBER GOSUB NUMBER ENDLINE{
+                          let physical, number = $1
+                          let line, n = $3
+                          Gosub (physical, number, n)
+                        }
+
+returnB:
+    NUMBER RETURN ENDLINE{
+                    let physical, number = $1
+                    Return (physical, number)
+                  }
+
+dim:
+    NUMBER DIM dim_list ENDLINE {let physical, n = $1
+                                 Dim (physical, n,$3)
+                                 }
+
+dim_list:
+    subs               { [$1] }
+    | subs COMMA dim_list { $1::$3 }
+
+                                
+
+rem:
+    NUMBER REM ENDLINE{
+                 let physical, number = $1
+                 Rem (physical,number)
+              }
+
+ident:
+     IDENT { Variable($1) }
+    | IDENT LPAREN expression RPAREN { 
+                                       let physical, id = $1
+                                       List(physical, id, $3)
+                                     }
+    | IDENT LPAREN expression COMMA expression RPAREN { 
+                                                          let physical, id = $1
+                                                          Table(physical, id, $3, $5)
+                                                      }
+subs:
+    IDENT LPAREN NUMBER RPAREN { let physical, id = $1
+                                 let line, n = $3
+                                 ListDim(id, n)
+                               }
+    | IDENT LPAREN NUMBER COMMA NUMBER RPAREN { let physical, id = $1
+                                                let line, n = $3
+                                                let line2, n2 = $5
+                                                TableDim(id, n, n2)
+                                              }
+
+math:
+    SIN LPAREN expression RPAREN     { Math("Sin", $3) }
+    | COS LPAREN expression RPAREN   { Math("Cos", $3) }
+    | TAN LPAREN expression RPAREN   { Math("Tan", $3) }
+    | ATN LPAREN expression RPAREN   { Math("Atn", $3) }
+    | EXP LPAREN expression RPAREN   { Math("Exp", $3) }
+    | ABS LPAREN expression RPAREN   { Math("Abs", $3) }
+    | LOG LPAREN expression RPAREN   { Math("Log", $3) }
+    | SQR LPAREN expression RPAREN   { Math("Sqr", $3) }
+    | INT LPAREN expression RPAREN   { Math("Int", $3) }
+    | RND LPAREN expression RPAREN   { Math("Rnd", $3) }
+
+expression:
+      expression PLUS divtimesexpr    { Plus ($2, $1, $3) }
+    | expression MINUS divtimesexpr   { Minus ($2, $1, $3) }
+    | divtimesexpr                  {$1}
+                        
+divtimesexpr:
+      divtimesexpr DIV powexpr     { Div ($2, $1, $3) }
+    | divtimesexpr TIMES powexpr   { Times ($2, $1, $3) }
+    | powexpr                       {$1}
+    
+powexpr:
+      powexpr POW simple_expression     { Pow ($2, $1, $3) }
+    | ident                         {$1}
+    | simple_expression             {$1}
+    
+simple_expression:
+    NUMBER {
+               let physical, n = $1
+               Number(physical,n)
+             }
+    | math { $1 }
+    | FN LPAREN NUMBER RPAREN { let line, name = $1
+                                let line, n = $3
+                                Fn(name,None, Some(n)) }
+    | FN LPAREN unsubs RPAREN { let line, name = $1
+                                Fn(name,Some($3), None) }
+    | FN LPAREN expression RPAREN { let line, name = $1
+                                    Fn(name,Some($3), None)}
+    | LPAREN expression RPAREN {$2}

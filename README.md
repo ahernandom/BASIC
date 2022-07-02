@@ -1,2 +1,3 @@
 # BASIC
-A BASIC compiler written in F#
+A simple compiler written in F# for the BASIC language
+# BASIC

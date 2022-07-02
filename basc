@@ -1,0 +1,29 @@
+#!/usr/bin/env python2
+
+import sys
+import os.path
+
+def split_noext_dir(path):
+    '''
+    Split path in two: file without extension and directory.
+    '''
+    name =  os.path.basename(path)
+    if name[-5:] == '.bas':
+        name = name[:-5]
+    return (name, os.path.dirname(path))
+    
+if len(sys.argv) != 2:
+    print >> sys.stderr, "Please specify the name of the input file."
+    sys.exit(1)    
+    
+noext, folder = split_noext_dir(sys.argv[1])
+source        = os.path.join(folder, noext + '.bas')
+target        = os.path.join(folder, noext + '.il')
+executable    = os.path.join(folder, noext + '.exe')
+
+if os.system('./BASIC.exe %s %s' % (source, target)) == 0:        
+    if os.system('ilasm %s' % (target, )) == 0:
+        if os.system('chmod +x %s' % (executable, )) == 0:
+            sys.exit(0)
+        
+sys.exit(1)

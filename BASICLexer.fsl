@@ -1,0 +1,90 @@
+{
+module BASICLexer
+
+open BASICParser
+open Microsoft.FSharp.Text.Lexing
+
+// This function takes a lexer buffer and returns a string with the lexeme
+// of the most recently recognized token.
+let lexeme = LexBuffer<char>.LexemeString
+}
+
+let digit       = ['0'-'9']
+let alpha       = ['A'-'Z']
+let number      = '-'?'.'?digit+('.'digit+)?('E''-'?digit+)?
+let variable    = alpha digit?
+let whitespace  = ' ' | '\t' | '\r'
+let newline     = ['\n']+
+let label       = '"'[^'"']*'"'
+let comma       = ','+
+let fn          = 'F''N'alpha
+let rem         = 'R''E''M'' '[^'\n']*
+//whitespace (digit|alpha)*
+
+(*
+    You can refer to a predefined variable (visible only inside the 
+    rule) named "lexbuf" that is the instantiation of the 
+    Microsoft.FSharp.Text.Lexing.LexBuffer type.
+*)
+rule token = parse
+    | whitespace{ token lexbuf }
+    | newline   { incr physicalNumber
+                  ENDLINE
+                }
+    | number    { NUMBER(!physicalNumber,lexeme lexbuf) } 
+    | comma     { COMMA }
+    | "("       { LPAREN }
+    | ")"       { RPAREN }
+    
+    | "+"       { PLUS !physicalNumber }
+    | "-"       { MINUS !physicalNumber }
+    | "*"       { TIMES !physicalNumber }
+    | "/"       { DIV !physicalNumber }
+    | "^"       { POW !physicalNumber }
+    | "="       { EQU !physicalNumber }
+
+    | "<"       { LSS !physicalNumber }
+    | "<="      { LQU !physicalNumber }
+    | ">"       { GRT !physicalNumber }
+    | ">="      { GQU !physicalNumber }
+    | "<>"      { NQU !physicalNumber }
+
+    
+    | "LET"	    { LET !physicalNumber }
+    | "READ"    { READ !physicalNumber }
+    | "DATA"    { DATA !physicalNumber }
+    | "PRINT"   { PRINT !physicalNumber }
+    | "GOTO"    { GOTO !physicalNumber }
+    | "IF"      { IF !physicalNumber }
+    | "THEN"    { THEN !physicalNumber }
+    | "FOR"	    { FOR !physicalNumber }
+    | "NEXT"    { NEXT !physicalNumber }
+    | "END"     { END !physicalNumber }
+    | "STOP"    { STOP !physicalNumber }
+    | "DEF"     { DEF !physicalNumber }
+    | fn      { FN(!physicalNumber, (lexeme lexbuf)) }
+    | "GOSUB"   { GOSUB !physicalNumber }
+    | "RETURN"  { RETURN !physicalNumber }
+    | "DIM"     { DIM !physicalNumber }
+    | rem     { REM !physicalNumber }
+    | "TO"      { TO !physicalNumber } 
+    | "STEP"    { STEP !physicalNumber }
+    | "SIN"     { SIN !physicalNumber }
+    | "COS"     { COS !physicalNumber }
+    | "TAN"     { TAN !physicalNumber }
+    | "ATN"     { ATN !physicalNumber }
+    | "EXP"     { EXP !physicalNumber }
+    | "ABS"     { ABS !physicalNumber }
+    | "LOG"     { LOG !physicalNumber }
+    | "SQR"     { SQR !physicalNumber }
+    | "INT"     { INT !physicalNumber }
+    | "RND"     { RND !physicalNumber }
+    | label     { LABEL (lexeme lexbuf) }
+    | variable  { // Make sure to put this case after all other reserved
+                  // words which would conflict with the definition of an
+                  // identifier.
+                  IDENT (!physicalNumber, lexeme lexbuf)
+                }                     
+    | ['a'-'z'] { failwithf "You must write with capital letters." }
+    | eof       { EOF }
+    | _         { failwithf "'%s' is an invalid input character" (lexeme lexbuf) }
